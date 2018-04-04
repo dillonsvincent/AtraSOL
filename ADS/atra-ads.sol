@@ -99,7 +99,7 @@ contract ADS {
         return ContractNamesToRoutes[keccak256(name)] = routeId;
     }
 
-    function Update(string name, uint currentExpiration, address nextContractAddress, string nextAbiLocation) public returns(bool success) {
+    function Edit(string name, uint currentExpiration, address nextContractAddress, string nextAbiLocation) public returns(bool success) {
         //dont require name validation since we aren't storing it
         require(bytes(nextAbiLocation).length <= 256);
        
@@ -113,7 +113,7 @@ contract ADS {
     
     //This function will switch over the next route to the current route data if the current route has expired
     //Sets expiration to never
-    function Next(string name) public returns(bool success) {
+    function Update(string name) public returns(bool success) {
         uint routeId = ContractNamesToRoutes[keccak256(name)]; // get route Id by route name
         require(Routes[routeId].owner == msg.sender); //require sender to be owner to update
         //require there to be an expiration time for the current contract and it be expired
