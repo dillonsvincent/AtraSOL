@@ -41,10 +41,16 @@ contract ADS {
         ContractNamesToRoutes[keccak256('')] = Routes.push(Route('', 0, this, this, RouteData('NULL',this), RouteData('NULL',this))) -1;
         // Register ADS to position 1 
         ContractNamesToRoutes[keccak256('ADS')] = Routes.push(Route('ADS', 0, msg.sender, msg.sender, RouteData('atra.io/abi/ads',this), RouteData('atra.io/abi/ads',this))) -1;
+        OwnersToRoutes[msg.sender].push(1);
     }
 
-    function Get(string routeName) public view returns(string name, address owner, uint currentExpiration, address currentContractAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation) {
-        Route memory route = Routes[ContractNamesToRoutes[keccak256(routeName)]];
+    function Get(uint routeId, string routeName) public view returns(string name, address owner, uint currentExpiration, address currentContractAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation) {
+        Route memory route;
+        if(bytes(routeName).length > 0){
+            route = Routes[ContractNamesToRoutes[keccak256(routeName)]];  
+        }else{
+            route = Routes[routeId];  
+        }
         return (route.name, route.owner, route.currentExpiration, route.current.contractAddress, route.current.abiLocation, route.next.contractAddress, route.next.abiLocation);
     }
     
@@ -71,12 +77,23 @@ contract ADS {
         return route.next.contractAddress;
     }
     
+    function RoutesLength() public view returns(uint length){
+        return Routes.length;
+    }
+    
+    function NameTaken(string name) public view returns(bool) {
+        require(bytes(name).length > 0 && bytes(name).length <= 100);
+        if(ContractNamesToRoutes[keccak256(name)] == 0){
+            return false;//name is not taken
+        }else{
+            return true;
+        }
+    }
+    
     function Create(string name, address currentAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation, address newOwner, uint currentExpiration) public returns(uint newRouteId) {
-        // keep the memory from getting out of hand
+        // validate inputs
         require(bytes(name).length > 0 && bytes(name).length <= 100 && bytes(currentAbiLocation).length <= 256 && bytes(nextAbiLocation).length <= 256);
         require(ContractNamesToRoutes[keccak256(name)] == 0);
-        // "x","0xd26114cd6EE289AccF82350c8d8487fedB8A0C07", "github.com/omg/abi", "0xd26114cd6EE289AccF82350c8d8487fedB8A0C07", "github.com/omg/abi", "0x0", 0
-        // "x","0x0", "git", "0x0", "git", "0x0", 0
         uint routeId = Routes.push(Route(name, now + currentExpiration, msg.sender, newOwner, RouteData(currentAbiLocation, currentAddress), RouteData(nextAbiLocation, nextAddress))) -1;
         OwnersToRoutes[msg.sender].push(routeId);
         return ContractNamesToRoutes[keccak256(name)] = routeId;
@@ -95,7 +112,7 @@ contract ADS {
     }
     
     //This function will switch over the next route to the current route data if the current route has expired
-    //Set expiration to never
+    //Sets expiration to never
     function Next(string name) public returns(bool success) {
         uint routeId = ContractNamesToRoutes[keccak256(name)]; // get route Id by route name
         require(Routes[routeId].owner == msg.sender); //require sender to be owner to update
@@ -106,18 +123,6 @@ contract ADS {
         return true; // return success
     }
     
-    function WhatsNow() public view returns(uint time){
-        return now;
-    }
-    
-    function NameTaken(string name) public view returns(bool) {
-        require(bytes(name).length > 0 && bytes(name).length <= 100);
-        if(ContractNamesToRoutes[keccak256(name)] == 0){
-            return false;//name is not taken
-        }else{
-            return true;
-        }
-    }
 
     function TransferRouteOwnership(string name, address newOwner) public returns(bool success) {
         uint routeId = ContractNamesToRoutes[keccak256(name)]; // get route Id by route name
@@ -131,7 +136,6 @@ contract ADS {
         require(Routes[routeId].newOwner == msg.sender); //require sender to be newOwner to accecpt ownership
         
         //delete route lookup for pervious owner
-    
         //get last routeid in array
         uint keepRouteId = OwnersToRoutes[Routes[routeId].owner][OwnersToRoutes[Routes[routeId].owner].length - 1];
         //replace routeId marked for delete
@@ -140,7 +144,6 @@ contract ADS {
                 OwnersToRoutes[Routes[routeId].owner][x] = keepRouteId;
             }
         }
-
         //delete last position
         delete OwnersToRoutes[Routes[routeId].owner][OwnersToRoutes[Routes[routeId].owner].length - 1];
         //adjust array length
