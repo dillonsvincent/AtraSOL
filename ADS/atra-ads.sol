@@ -1,4 +1,18 @@
 pragma solidity^0.4.20;
+/*
+    Company: Atra Blockchain Services LLC
+    Website: atra.io
+    Author: Dillon Vincent
+    Title: Address Delegate Service (ADS)
+    Description: ADS provides the functionality to mange communication with contracts. 
+    Rely on ADS for routing your product name to your products contract.
+    Features:
+    Create Route: Create a unique route name between 1-100 characters that you own along with the data
+    Update Route: Change your route data to serve new information in the case of updating to a new contract
+    Own Route: Senders own their routes and have the ability to transfer ownership 
+    Loook Ups: Find all routes that a sender owns. Get route date by name.
+    Date: 4/4/18
+*/
 
 contract ADS {
 
@@ -19,7 +33,7 @@ contract ADS {
     // Declare Storage 
     Route[] public Routes;
     mapping(bytes32 => uint) public ContractNamesToRoutes; // keccak256([name])
-    mapping(address => uint[]) public OwnersToRoutes; // help pull all a users routes for the ui
+    mapping(address => uint[]) public OwnersToRoutes;
 
     //Constructor
     function ADS() public {
@@ -80,8 +94,9 @@ contract ADS {
         return true; // return success
     }
     
-    //This function will switch over the next route to the current route data if the current route has expired, and set expiration
-    function Live(string name) public returns(bool success) {
+    //This function will switch over the next route to the current route data if the current route has expired
+    //Set expiration to never
+    function Next(string name) public returns(bool success) {
         uint routeId = ContractNamesToRoutes[keccak256(name)]; // get route Id by route name
         require(Routes[routeId].owner == msg.sender); //require sender to be owner to update
         //require there to be an expiration time for the current contract and it be expired
