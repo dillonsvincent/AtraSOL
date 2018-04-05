@@ -46,14 +46,14 @@ contract ADS {
         OwnersToRoutes[msg.sender].push(1);
     }
 
-    function Get(uint routeId, string routeName) public view returns(string name, address owner, uint currentExpiration, address currentContractAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation) {
+    function Get(uint routeId, string routeName) public view returns(string name, address owner, uint currentExpiration, address currentContractAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation, uint birth) {
         Route memory route;
         if(bytes(routeName).length > 0){
             route = Routes[ContractNamesToRoutes[keccak256(routeName)]];  
         }else{
             route = Routes[routeId];  
         }
-        return (route.name, route.owner, route.currentExpiration, route.current.contractAddress, route.current.abiLocation, route.next.contractAddress, route.next.abiLocation);
+        return (route.name, route.owner, route.currentExpiration, route.current.contractAddress, route.current.abiLocation, route.next.contractAddress, route.next.abiLocation, route.birth);
     }
     
     function GetRouteIdsForOwner(address owner) public view returns(uint[] routeIds) {
