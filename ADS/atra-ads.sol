@@ -8,7 +8,8 @@ pragma solidity^0.4.20;
     Rely on ADS for routing your product name to your products contract.
     Features:
     Create Route: Create a unique route name between 1-100 characters that you own along with the data
-    Update Route: Change your route data to serve new information in the case of updating to a new contract
+    Edit Route: Modify next route data
+    Update Route: Updates the route to use the next route data as current
     Own Route: Senders own their routes and have the ability to transfer ownership 
     Loook Ups: Find all routes that a sender owns. Get route date by name.
     Date: 4/4/18
@@ -28,6 +29,7 @@ contract ADS {
         address newOwner; // used to transfer ownership
         RouteData current; // current contract data
         RouteData next; // next contract data
+        uint birth; //time created
     }
     
     // Declare Storage 
@@ -38,9 +40,9 @@ contract ADS {
     //Constructor
     function ADS() public {
         // Create padding in Routes array to be able to check for unique name in list by returning 0 for no match
-        ContractNamesToRoutes[keccak256('')] = Routes.push(Route('', 0, this, this, RouteData('NULL',this), RouteData('NULL',this))) -1;
+        ContractNamesToRoutes[keccak256('')] = Routes.push(Route('', 0, this, this, RouteData('NULL',this), RouteData('NULL',this), now)) -1;
         // Register ADS to position 1 
-        ContractNamesToRoutes[keccak256('ADS')] = Routes.push(Route('ADS', 0, msg.sender, msg.sender, RouteData('atra.io/abi/ads',this), RouteData('atra.io/abi/ads',this))) -1;
+        ContractNamesToRoutes[keccak256('ADS')] = Routes.push(Route('ADS', 0, msg.sender, msg.sender, RouteData('atra.io/abi/ads',this), RouteData('atra.io/abi/ads',this), now)) -1;
         OwnersToRoutes[msg.sender].push(1);
     }
 
@@ -94,7 +96,7 @@ contract ADS {
         // validate inputs
         require(bytes(name).length > 0 && bytes(name).length <= 100 && bytes(currentAbiLocation).length <= 256 && bytes(nextAbiLocation).length <= 256);
         require(ContractNamesToRoutes[keccak256(name)] == 0);
-        uint routeId = Routes.push(Route(name, now + currentExpiration, msg.sender, newOwner, RouteData(currentAbiLocation, currentAddress), RouteData(nextAbiLocation, nextAddress))) -1;
+        uint routeId = Routes.push(Route(name, now + currentExpiration, msg.sender, newOwner, RouteData(currentAbiLocation, currentAddress), RouteData(nextAbiLocation, nextAddress),now)) -1;
         OwnersToRoutes[msg.sender].push(routeId);
         return ContractNamesToRoutes[keccak256(name)] = routeId;
     }
