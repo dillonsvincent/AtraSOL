@@ -14,8 +14,52 @@ pragma solidity^0.4.20;
     Loook Ups: Find all routes that a sender owns. Get route date by name.
     Date: 4/4/18
 */
+interface IADS {
+    function Create(string name, address currentAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation, address newOwner, uint activateDate) public payable returns(uint newRouteId);
+    
+    function Edit(string name, uint activateNext, address nextContractAddress, string nextAbiLocation) public returns(bool success);
+    
+    function Update(string name) public returns(bool success);
+    
+    function Get(uint routeId, string routeName) public view returns(string name, address owner, uint currentExpiration, address currentContractAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation, uint created);
+    function GetRouteIdsForOwner(address owner) public view returns(uint[] routeIds);
+    function GetAddress(string routeName) public view returns(address validAddress);
+    function GetCurrentAddress(string routeName) public view returns(address currentContractAddress);
+    function GetNextAddress(string routeName) public view returns(address nextContractAddress);
+    
+    function RoutesLength() public view returns(uint length);
+    function NameTaken(string name) public view returns(bool);
+    
+    function TransferRouteOwnership(string name, address newOwner) public returns(bool success);
+    function AcceptRouteOwnership(string name) public returns(bool success);
+}
+contract AtraOwners {
+    address public owner;
+    address private newOwner;
 
-contract ADS {
+    event OwnershipTransferred(address indexed _from, address indexed _to);
+
+    function AtraOwners() public {
+        owner = msg.sender;
+    }
+
+    modifier isOwner {
+        require(msg.sender == owner);
+        _;
+    }
+
+    function transferOwnership(address _newOwner) public isOwner {
+        newOwner = _newOwner;
+    }
+    function acceptOwnership() public {
+        require(msg.sender == newOwner);
+        emit OwnershipTransferred(owner, newOwner);
+        owner = newOwner;
+        newOwner = address(0);
+    }
+}
+
+contract ADS is IADS, AtraOwners {
 
     struct RouteData {
         string abiLocation; // url pointing to the abi json
@@ -24,18 +68,26 @@ contract ADS {
 
     struct Route {
         string name; //this will never change, used as a key
-        uint currentExpiration; // the epoch time when the current contract expires, 0=never
+        uint activateNext; // the epoch time when the next contract activates, 0 = never
         address owner; // address that owns/created and can modify route
         address newOwner; // used to transfer ownership
         RouteData current; // current contract data
         RouteData next; // next contract data
-        uint birth; //time created
+        uint created; //time created
     }
     
     // Declare Storage 
+    uint RoutePrice = 10000000000000000;
     Route[] public Routes;
     mapping(bytes32 => uint) public ContractNamesToRoutes; // keccak256([name])
     mapping(address => uint[]) public OwnersToRoutes;
+    
+    //Events
+    event RouteCreated(string name, address owner);
+    event RouteEdited(string name, address owner);
+    event RouteUpdated(string name, address owner);
+    event TransferOwnership(string name, address owner, address newOwner);
+    event AcceptOwnership(string name, address newOwner);
 
     //Constructor
     function ADS() public {
@@ -46,14 +98,14 @@ contract ADS {
         OwnersToRoutes[msg.sender].push(1);
     }
 
-    function Get(uint routeId, string routeName) public view returns(string name, address owner, uint currentExpiration, address currentContractAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation, uint birth) {
+    function Get(uint routeId, string routeName) public view returns(string name, address owner, uint currentExpiration, address currentContractAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation, uint created) {
         Route memory route;
         if(bytes(routeName).length > 0){
             route = Routes[ContractNamesToRoutes[keccak256(routeName)]];  
         }else{
             route = Routes[routeId];  
         }
-        return (route.name, route.owner, route.currentExpiration, route.current.contractAddress, route.current.abiLocation, route.next.contractAddress, route.next.abiLocation, route.birth);
+        return (route.name, route.owner, route.activateNext, route.current.contractAddress, route.current.abiLocation, route.next.contractAddress, route.next.abiLocation, route.created);
     }
     
     function GetRouteIdsForOwner(address owner) public view returns(uint[] routeIds) {
@@ -61,9 +113,9 @@ contract ADS {
     }
     
     //returns the valid contract address
-    function GetAddress(string routeName) public view returns(address validAddress){
+    function GetAddress(string routeName) public view returns(address validAddress) {
         Route memory route = Routes[ContractNamesToRoutes[keccak256(routeName)]];
-        if(route.currentExpiration < now){ // the current contract has expired use next
+        if(route.activateNext < now){
             return route.next.contractAddress;
         }else{
             return route.current.contractAddress;  
@@ -74,6 +126,7 @@ contract ADS {
         Route memory route = Routes[ContractNamesToRoutes[keccak256(routeName)]];
         return route.current.contractAddress;
     }
+    
     function GetNextAddress(string routeName) public view returns(address nextContractAddress) {
         Route memory route = Routes[ContractNamesToRoutes[keccak256(routeName)]];
         return route.next.contractAddress;
@@ -92,36 +145,37 @@ contract ADS {
         }
     }
     
-    function Create(string name, address currentAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation, address newOwner, uint currentExpiration) public returns(uint newRouteId) {
+    function Create(string name, address currentAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation, address newOwner, uint activateDate) public payable returns(uint newRouteId) {
+         require(msg.value == RoutePrice);
         // validate inputs
         require(bytes(name).length > 0 && bytes(name).length <= 100 && bytes(currentAbiLocation).length <= 256 && bytes(nextAbiLocation).length <= 256);
         require(ContractNamesToRoutes[keccak256(name)] == 0);
-        uint routeId = Routes.push(Route(name, now + currentExpiration, msg.sender, newOwner, RouteData(currentAbiLocation, currentAddress), RouteData(nextAbiLocation, nextAddress),now)) -1;
+        uint routeId = Routes.push(Route(name, activateDate == 0 ? 0 : now + activateDate, msg.sender, newOwner, RouteData(currentAbiLocation, currentAddress), RouteData(nextAbiLocation, nextAddress),now)) -1;
         OwnersToRoutes[msg.sender].push(routeId);
+        emit RouteCreated(name, msg.sender);
         return ContractNamesToRoutes[keccak256(name)] = routeId;
     }
 
-    function Edit(string name, uint currentExpiration, address nextContractAddress, string nextAbiLocation) public returns(bool success) {
+    function Edit(string name, uint activateNext, address nextContractAddress, string nextAbiLocation) public returns(bool success) {
         //dont require name validation since we aren't storing it
         require(bytes(nextAbiLocation).length <= 256);
        
         uint routeId = ContractNamesToRoutes[keccak256(name)];
         require(Routes[routeId].owner == msg.sender); //require sender to be owner to update
-        Routes[routeId].currentExpiration = currentExpiration == 0 ? 0 : now + currentExpiration; // update when the current contract expires to epoch
+        Routes[routeId].activateNext = activateNext == 0 ? 0 : now + activateNext; // update when the next contract is active to epoch
         Routes[routeId].next.contractAddress = nextContractAddress; // update next address
         Routes[routeId].next.abiLocation = nextAbiLocation; // update next abi location
+        emit RouteEdited(name, msg.sender);
         return true; // return success
     }
     
-    //This function will switch over the next route to the current route data if the current route has expired
-    //Sets expiration to never
+    //This function will switch over the next route to the current route data if the next route is active
     function Update(string name) public returns(bool success) {
         uint routeId = ContractNamesToRoutes[keccak256(name)]; // get route Id by route name
-        require(Routes[routeId].owner == msg.sender); //require sender to be owner to update
-        //require there to be an expiration time for the current contract and it be expired
-        require(Routes[routeId].currentExpiration != 0 && Routes[routeId].currentExpiration < now);
+        require(Routes[routeId].activateNext != 0 && Routes[routeId].activateNext < now);
         Routes[routeId].current = Routes[routeId].next; // update current with contents of next
-        Routes[routeId].currentExpiration = 0; // set the current contract to never expire
+        Routes[routeId].activateNext = 0; // set the activateNext contract to never activate
+        emit RouteUpdated(name, msg.sender);
         return true; // return success
     }
     
@@ -130,6 +184,7 @@ contract ADS {
         uint routeId = ContractNamesToRoutes[keccak256(name)]; // get route Id by route name
         require(Routes[routeId].owner == msg.sender); //require sender to be owner to transfer ownership
         Routes[routeId].newOwner = newOwner; // set new owner
+        emit TransferOwnership(name, msg.sender, newOwner);
         return true; // return success
     }
 
@@ -155,6 +210,25 @@ contract ADS {
         Routes[routeId].owner = Routes[routeId].newOwner; // transfer ownership
         OwnersToRoutes[Routes[routeId].owner].push(routeId); // add lookup
         
+        emit AcceptOwnership(name, Routes[routeId].owner);
         return true; // return success
+    }
+    function Price() public view returns(uint price) {
+        return RoutePrice;
+    } 
+    
+    function SetPrice(uint amount) public isOwner returns(bool) {
+        RoutePrice = amount;
+        return true;
+    }
+
+    function Widthdraw(uint amount) public isOwner returns(bool) {
+        // if amount is zero take the whole balance else use amount
+        owner.transfer(amount == 0 ? address(this).balance : amount);
+        return true;
+    }
+
+    function Balance() public view isOwner returns(uint) {
+        return address(this).balance;
     }
 }
