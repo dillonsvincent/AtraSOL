@@ -136,7 +136,7 @@ contract ADS is IADS, AtraOwners {
         // validate inputs
         require(bytes(name).length > 0 && bytes(name).length <= 100 && bytes(currentAbiLocation).length <= 256);
         require(ContractNamesToRoutes[keccak256(name)] == 0);
-        uint routeId = Routes.push(Route(name, 0, msg.sender, msg.sender, RouteData(currentAbiLocation, currentAddress), RouteData('', address(0)),now, 1)) -1;
+        uint routeId = Routes.push(Route(name, 0, msg.sender, msg.sender, RouteData(currentAbiLocation, currentAddress), RouteData(currentAbiLocation, currentAddress),now, 1)) -1;
         OwnersToRoutes[msg.sender].push(routeId);
         emit RouteCreated(name, msg.sender);
         return ContractNamesToRoutes[keccak256(name)] = routeId;
