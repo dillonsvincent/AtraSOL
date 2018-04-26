@@ -18,7 +18,7 @@ interface IADS {
     
     function ScheduleUpdate(uint routeId, string routeName, uint activateNext, address nextContractAddress, string nextAbiLocation) public returns(bool success);
     
-    function Get(uint routeId, string routeName) public view returns(string name, address owner, uint currentExpiration, address currentContractAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation, uint created, uint version, uint active);
+    function Get(uint routeId, string routeName) public view returns(string name, address owner, uint currentExpiration, address currentContractAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation, uint created, uint version, uint active, uint released);
     function GetRouteIdsForOwner(address owner) public view returns(uint[] routeIds);
     
     function GetAddress(uint routeId, string routeName) public view returns(address validAddress);
@@ -71,6 +71,7 @@ contract ADS is IADS, AtraOwners {
         RouteData next; // next contract data
         uint created; //time created
         uint version; // auto increment 
+        uint released; //when the last release was
     }
     
     // Declare Storage 
@@ -88,20 +89,20 @@ contract ADS is IADS, AtraOwners {
     //Constructor
     function ADS() public {
         // Create padding in Routes array to be able to check for unique name in list by returning 0 for no match
-        ContractNamesToRoutes[keccak256('')] = Routes.push(Route('', 0, this, this, RouteData('NULL',this), RouteData('NULL',this), now, 1)) -1;
+        ContractNamesToRoutes[keccak256('')] = Routes.push(Route('', 0, this, this, RouteData('NULL',this), RouteData('NULL',this), now, 1, now)) -1;
         // Register ADS to position 1 
-        ContractNamesToRoutes[keccak256('ADS')] = Routes.push(Route('ADS', 0, msg.sender, msg.sender, RouteData('atra.io/abi/ads',this), RouteData('atra.io/abi/ads',this), now, 1)) -1;
+        ContractNamesToRoutes[keccak256('ADS')] = Routes.push(Route('ADS', 0, msg.sender, msg.sender, RouteData('atra.io/abi/ads',this), RouteData('atra.io/abi/ads',this), now, 1, now)) -1;
         OwnersToRoutes[msg.sender].push(1);
     }
 
-    function Get(uint routeId, string routeName) public view returns(string name, address owner, uint currentExpiration, address currentContractAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation, uint created, uint version, uint active) {
+    function Get(uint routeId, string routeName) public view returns(string name, address owner, uint currentExpiration, address currentContractAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation, uint created, uint version, uint active, uint released) {
         Route memory route;
         if(bytes(routeName).length > 0){
             route = Routes[ContractNamesToRoutes[keccak256(routeName)]];  
         }else{
             route = Routes[routeId];  
         }
-        return (route.name, route.owner, route.activateNext, route.current.contractAddress, route.current.abiLocation, route.next.contractAddress, route.next.abiLocation, route.created, route.version, route.activateNext == 0 ? 0: route.activateNext < now ? 1 : 0);
+        return (route.name, route.owner, route.activateNext, route.current.contractAddress, route.current.abiLocation, route.next.contractAddress, route.next.abiLocation, route.created, route.version, route.activateNext == 0 ? 0: route.activateNext < now ? 1 : 0, route.released);
     }
     
     function GetRouteIdsForOwner(address owner) public view returns(uint[] routeIds) {
@@ -136,7 +137,7 @@ contract ADS is IADS, AtraOwners {
         // validate inputs
         require(bytes(name).length > 0 && bytes(name).length <= 100 && bytes(currentAbiLocation).length <= 256);
         require(ContractNamesToRoutes[keccak256(name)] == 0);
-        uint routeId = Routes.push(Route(name, 0, msg.sender, msg.sender, RouteData(currentAbiLocation, currentAddress), RouteData(currentAbiLocation, currentAddress),now, 1)) -1;
+        uint routeId = Routes.push(Route(name, 0, msg.sender, msg.sender, RouteData(currentAbiLocation, currentAddress), RouteData(currentAbiLocation, currentAddress),now, 1, now)) -1;
         OwnersToRoutes[msg.sender].push(routeId);
         emit RouteCreated(name, msg.sender);
         return ContractNamesToRoutes[keccak256(name)] = routeId;
@@ -156,6 +157,7 @@ contract ADS is IADS, AtraOwners {
         //if Next Contract Data is active do not overwrite Next data, move it to Current and increment the version
         if(route.activateNext < now){
             route.current = route.next;
+            route.released = route.activateNext;
             route.version = route.version + 1;
         }
         
