@@ -89,9 +89,9 @@ contract ADS is IADS, AtraOwners {
     //Constructor
     function ADS() public {
         // Create padding in Routes array to be able to check for unique name in list by returning 0 for no match
-        ContractNamesToRoutes[keccak256('')] = Routes.push(Route('', 0, this, this, RouteData('NULL',this), RouteData('NULL',this), now, 1, now)) -1;
+        ContractNamesToRoutes[keccak256('')] = Routes.push(Route('', now, this, this, RouteData('NULL',this), RouteData('NULL',this), now, 0, now)) -1;
         // Register ADS to position 1 
-        ContractNamesToRoutes[keccak256('ADS')] = Routes.push(Route('ADS', 0, msg.sender, msg.sender, RouteData('atra.io/abi/ads',this), RouteData('atra.io/abi/ads',this), now, 1, now)) -1;
+        ContractNamesToRoutes[keccak256('ADS')] = Routes.push(Route('ADS', now, msg.sender, msg.sender, RouteData('atra.io/abi/ads',this), RouteData('atra.io/abi/ads',this), now, 0, now)) -1;
         OwnersToRoutes[msg.sender].push(1);
     }
 
@@ -102,7 +102,19 @@ contract ADS is IADS, AtraOwners {
         }else{
             route = Routes[routeId];  
         }
-        return (route.name, route.owner, route.activateNext, route.current.contractAddress, route.current.abiLocation, route.next.contractAddress, route.next.abiLocation, route.created, route.version, route.activateNext == 0 ? 0: route.activateNext < now ? 1 : 0, route.released);
+        return (
+            route.name, 
+            route.owner, 
+            route.activateNext, 
+            route.current.contractAddress, 
+            route.current.abiLocation, 
+            route.next.contractAddress, 
+            route.next.abiLocation, 
+            route.created, //created 
+            route.activateNext < now ? route.version + 1 : route.version, //version
+            route.activateNext == 0 ? 0: route.activateNext < now ? 1 : 0, //active position
+            route.activateNext < now ? route.activateNext : route.released //released
+            );
     }
     
     function GetRouteIdsForOwner(address owner) public view returns(uint[] routeIds) {
@@ -116,7 +128,7 @@ contract ADS is IADS, AtraOwners {
         }else{
             route = Routes[routeId];  
         }
-        return route.activateNext == 0 ? route.current.contractAddress : route.activateNext < now ? route.next.contractAddress  : route.current.contractAddress;
+        return route.activateNext < now ? route.next.contractAddress  : route.current.contractAddress;
     }
     
     function RoutesLength() public view returns(uint length){
@@ -137,7 +149,7 @@ contract ADS is IADS, AtraOwners {
         // validate inputs
         require(bytes(name).length > 0 && bytes(name).length <= 100 && bytes(currentAbiLocation).length <= 256);
         require(ContractNamesToRoutes[keccak256(name)] == 0);
-        uint routeId = Routes.push(Route(name, 0, msg.sender, msg.sender, RouteData(currentAbiLocation, currentAddress), RouteData(currentAbiLocation, currentAddress),now, 1, now)) -1;
+        uint routeId = Routes.push(Route(name, now, msg.sender, msg.sender, RouteData(currentAbiLocation, currentAddress), RouteData(currentAbiLocation, currentAddress),now, 0, now)) -1;
         OwnersToRoutes[msg.sender].push(routeId);
         emit RouteCreated(name, msg.sender);
         return ContractNamesToRoutes[keccak256(name)] = routeId;
