@@ -29,7 +29,7 @@ contract AtraOwners {
 
     event OwnershipTransferred(address from, address to);
 
-    function AtraOwners() public {
+    constructor() public {
         owner = msg.sender;
     }
 
@@ -48,9 +48,27 @@ contract AtraOwners {
         newOwner = address(0);
     }
 }
+library SafeMath {
+    function add(uint a, uint b) internal pure returns (uint c) {
+        c = a + b;
+        require(c >= a);
+    }
+    function sub(uint a, uint b) internal pure returns (uint c) {
+        require(b <= a);
+        c = a - b;
+    }
+    function mul(uint a, uint b) internal pure returns (uint c) {
+        c = a * b;
+        require(a == 0 || c / a == b);
+    }
+    function div(uint a, uint b) internal pure returns (uint c) {
+        require(b > 0);
+        c = a / b;
+    }
+}
 
 contract ADS is IADS, AtraOwners {
-
+    using SafeMath for uint;
     struct RouteData {
         string abiLocation; // url pointing to the abi json
         address contractAddress; // address pointing to an ethereum contract
@@ -105,8 +123,11 @@ contract ADS is IADS, AtraOwners {
             route.next.contractAddress, 
             route.next.abiLocation, 
             route.created, //created 
-            route.activateNext < now ? route.version + 1 : route.version, //version
+            //check is next contract is active, if so it's a different version add 1, else return normal version
+            route.activateNext < now ? route.version.add(1) : route.version, //version
+            // active position  will be used to determine what address to use by the client 0=current 1=next
             route.activateNext == 0 ? 0: route.activateNext < now ? 1 : 0, //active position
+            // if update is active the released date is when it went live, else it's the release date
             route.activateNext < now ? route.activateNext : route.released //released
             );
     }
@@ -164,10 +185,10 @@ contract ADS is IADS, AtraOwners {
         if(route.activateNext < now){
             route.current = route.next;
             route.released = route.activateNext;
-            route.version = route.version + 1;
+            route.version = route.version.add(1);
         }
         
-        route.activateNext = now + activateNext;// if activateNext is zero update will be live now
+        route.activateNext = now.add(activateNext);// if activateNext is zero update will be live now
         route.next.contractAddress = nextContractAddress; // update next address
         route.next.abiLocation = nextAbiLocation; // update next abi location
         emit UpdateScheduled(route.name, msg.sender);
