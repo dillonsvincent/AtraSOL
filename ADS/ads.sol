@@ -4,13 +4,7 @@ pragma solidity^0.4.20;
     Website: atra.io
     Author: Dillon Vincent
     Title: Address Delegate Service (ADS)
-    Description: ADS provides the functionality to mange communication with contracts. 
-    Rely on ADS for routing your product name to your products contract.
-    Features:
-    Create Route: Create a unique route name between 1-100 characters that you own along with the data
-    Edit Route: Modify next route data
-    Own Route: Senders own their routes and have the ability to transfer ownership 
-    Loook Ups: Find all routes that a sender owns. Get route date by name.
+    Documentation: atra.readthedocs.io
     Date: 4/4/18
 */
 interface IADS {
@@ -87,7 +81,7 @@ contract ADS is IADS, AtraOwners {
     event AcceptOwnership(string name, address newOwner);
 
     //Constructor
-    function ADS() public {
+    constructor() public {
         // Create padding in Routes array to be able to check for unique name in list by returning 0 for no match
         ContractNamesToRoutes[keccak256('')] = Routes.push(Route('', now, this, this, RouteData('NULL',this), RouteData('NULL',this), now, 0, now)) -1;
         // Register ADS to position 1 
