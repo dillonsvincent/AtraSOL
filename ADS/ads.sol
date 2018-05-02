@@ -25,7 +25,7 @@ interface IADS {
 }
 contract AtraOwners {
     address public owner;
-    address private newOwner;
+    address public newOwner;
 
     event OwnershipTransferred(address from, address to);
 
