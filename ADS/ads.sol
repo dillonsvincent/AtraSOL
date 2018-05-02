@@ -126,7 +126,7 @@ contract ADS is IADS, AtraOwners {
             //check is next contract is active, if so it's a different version add 1, else return normal version
             route.activateNext < now ? route.version.add(1) : route.version, //version
             // active position  will be used to determine what address to use by the client 0=current 1=next
-            route.activateNext == 0 ? 0: route.activateNext < now ? 1 : 0, //active position
+            route.activateNext < now ? 1 : 0, //active position
             // if update is active the released date is when it went live, else it's the release date
             route.activateNext < now ? route.activateNext : route.released //released
             );
