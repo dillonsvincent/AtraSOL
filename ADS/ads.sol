@@ -10,12 +10,13 @@ pragma solidity^0.4.20;
 interface IADS {
     function Create(string name, address currentAddress, string currentAbiLocation) public payable returns(uint newRouteId);
     
-    function ScheduleUpdate(uint routeId, string routeName, uint activateNext, address nextContractAddress, string nextAbiLocation) public returns(bool success);
+    function ScheduleUpdate(uint routeId, string routeName, uint updateRelease, address updateContractAddress, string updateAbiLocation) public returns(bool success);
     
-    function Get(uint routeId, string routeName) public view returns(string name, address owner, uint currentExpiration, address currentContractAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation, uint created, uint version, uint active, uint released);
+    function Get(uint routeId, string routeName) public view returns(string name, address owner, uint updateRelease, address currentContractAddress, string currentAbiLocation, address updateContractAddress, string updateAbiLocation, uint created, uint version, uint active, uint released);
     function GetRouteIdsForOwner(address owner) public view returns(uint[] routeIds);
     
     function GetAddress(uint routeId, string routeName) public view returns(address validAddress);
+    function GetAddressAndAbi(uint routeId, string routeName) public view returns(address validAddress, string abiLocation);
 
     function RoutesLength() public view returns(uint length);
     function NameTaken(string name) public view returns(bool);
@@ -53,22 +54,11 @@ library SafeMath {
         c = a + b;
         require(c >= a);
     }
-    function sub(uint a, uint b) internal pure returns (uint c) {
-        require(b <= a);
-        c = a - b;
-    }
-    function mul(uint a, uint b) internal pure returns (uint c) {
-        c = a * b;
-        require(a == 0 || c / a == b);
-    }
-    function div(uint a, uint b) internal pure returns (uint c) {
-        require(b > 0);
-        c = a / b;
-    }
 }
 
 contract ADS is IADS, AtraOwners {
     using SafeMath for uint;
+    
     struct RouteData {
         string abiLocation; // url pointing to the abi json
         address contractAddress; // address pointing to an ethereum contract
@@ -76,11 +66,11 @@ contract ADS is IADS, AtraOwners {
 
     struct Route {
         string name; //this will never change, used as a key
-        uint activateNext; // the epoch time when the next contract activates, 0 = never
+        uint updateRelease; // the epoch time when the updated contract data is released
         address owner; // address that owns/created and can modify route
         address newOwner; // used to transfer ownership
         RouteData current; // current contract data
-        RouteData next; // next contract data
+        RouteData update; // scheduled update contract data
         uint created; //time created
         uint version; // auto increment 
         uint released; //when the last release was
@@ -89,7 +79,7 @@ contract ADS is IADS, AtraOwners {
     // Declare Storage 
     uint RoutePrice = 0;
     Route[] public Routes;
-    mapping(bytes32 => uint) public ContractNamesToRoutes; // keccak256([name])
+    mapping(bytes32 => uint) public ContractNamesToRoutes; // (keccak256('Route Name') => routeId)
     mapping(address => uint[]) public OwnersToRoutes;
     
     //Events
@@ -101,13 +91,13 @@ contract ADS is IADS, AtraOwners {
     //Constructor
     constructor() public {
         // Create padding in Routes array to be able to check for unique name in list by returning 0 for no match
-        ContractNamesToRoutes[keccak256('')] = Routes.push(Route('', now, this, this, RouteData('NULL',this), RouteData('NULL',this), now, 0, now)) -1;
+        ContractNamesToRoutes[keccak256('')] = Routes.push(Route('', now, this, this, RouteData('',this), RouteData('',this), now, 0, now)) -1;
         // Register ADS to position 1 
-        ContractNamesToRoutes[keccak256('ADS')] = Routes.push(Route('ADS', now, msg.sender, msg.sender, RouteData('atra.io/abi/ads',this), RouteData('atra.io/abi/ads',this), now, 0, now)) -1;
+        ContractNamesToRoutes[keccak256('ADS')] = Routes.push(Route('ADS', now, msg.sender, msg.sender, RouteData('',this), RouteData('',this), now, 0, now)) -1;
         OwnersToRoutes[msg.sender].push(1);
     }
 
-    function Get(uint routeId, string routeName) public view returns(string name, address owner, uint currentExpiration, address currentContractAddress, string currentAbiLocation, address nextAddress, string nextAbiLocation, uint created, uint version, uint active, uint released) {
+    function Get(uint routeId, string routeName) public view returns(string name, address owner, uint updateRelease, address currentContractAddress, string currentAbiLocation, address updateContractAddress, string updateAbiLocation, uint created, uint version, uint active, uint released) {
         Route memory route;
         if(bytes(routeName).length > 0){
             route = Routes[ContractNamesToRoutes[keccak256(routeName)]];  
@@ -117,18 +107,18 @@ contract ADS is IADS, AtraOwners {
         return (
             route.name, 
             route.owner, 
-            route.activateNext, 
+            route.updateRelease, 
             route.current.contractAddress, 
             route.current.abiLocation, 
-            route.next.contractAddress, 
-            route.next.abiLocation, 
+            route.update.contractAddress, 
+            route.update.abiLocation, 
             route.created, //created 
             //check is next contract is active, if so it's a different version add 1, else return normal version
-            route.activateNext < now ? route.version.add(1) : route.version, //version
+            route.updateRelease < now ? route.version.add(1) : route.version, //version
             // active position  will be used to determine what address to use by the client 0=current 1=next
-            route.activateNext < now ? 1 : 0, //active position
+            route.updateRelease < now ? 1 : 0, //active position
             // if update is active the released date is when it went live, else it's the release date
-            route.activateNext < now ? route.activateNext : route.released //released
+            route.updateRelease < now ? route.updateRelease : route.released //released
             );
     }
     
@@ -143,7 +133,17 @@ contract ADS is IADS, AtraOwners {
         }else{
             route = Routes[routeId];  
         }
-        return route.activateNext < now ? route.next.contractAddress  : route.current.contractAddress;
+        return route.updateRelease < now ? route.update.contractAddress : route.current.contractAddress;
+    }
+    
+    function GetAddressAndAbi(uint routeId, string routeName) public view returns(address validAddress, string abiLocation) {
+        Route memory route;
+        if(bytes(routeName).length > 0){
+            route = Routes[ContractNamesToRoutes[keccak256(routeName)]];  
+        }else{
+            route = Routes[routeId];  
+        }
+        return route.updateRelease < now ? (route.update.contractAddress, route.update.abiLocation) : (route.current.contractAddress, route.current.abiLocation);
     }
     
     function RoutesLength() public view returns(uint length){
@@ -170,7 +170,7 @@ contract ADS is IADS, AtraOwners {
         return ContractNamesToRoutes[keccak256(name)] = routeId;
     }
 
-    function ScheduleUpdate(uint routeId, string routeName, uint activateNext, address nextContractAddress, string nextAbiLocation) public returns(bool success) {
+    function ScheduleUpdate(uint routeId, string routeName, uint updateRelease, address nextContractAddress, string nextAbiLocation) public returns(bool success) {
         //dont require name validation since we aren't storing it
         require(bytes(nextAbiLocation).length <= 256);
         Route storage route;
@@ -182,15 +182,15 @@ contract ADS is IADS, AtraOwners {
         require(route.owner == msg.sender); //require sender to be owner to update
         
         //if Next Contract Data is active do not overwrite Next data, move it to Current and increment the version
-        if(route.activateNext < now){
-            route.current = route.next;
-            route.released = route.activateNext;
+        if(route.updateRelease < now){
+            route.current = route.update;
+            route.released = route.updateRelease;
             route.version = route.version.add(1);
         }
         
-        route.activateNext = now.add(activateNext);// if activateNext is zero update will be live now
-        route.next.contractAddress = nextContractAddress; // update next address
-        route.next.abiLocation = nextAbiLocation; // update next abi location
+        route.updateRelease = now.add(updateRelease);// if updateRelease is zero update will be live now
+        route.update.contractAddress = nextContractAddress; // update next address
+        route.update.abiLocation = nextAbiLocation; // update next abi location
         emit UpdateScheduled(route.name, msg.sender);
         return true; // return success
     }
