@@ -5,7 +5,7 @@ pragma solidity^0.4.20;
     Author: Dillon Vincent
     Title: Address Delegate Service (ADS)
     Documentation: atra.readthedocs.io
-    Date: 4/4/18
+    Date: 5/14/18
 */
 interface IADS {
     function Create(string name, address currentAddress, string currentAbiLocation) public payable returns(uint newRouteId);
@@ -13,7 +13,6 @@ interface IADS {
     function ScheduleUpdate(uint _id, string _name, uint _release, address _addr, string _abiUrl) public returns(bool success);
 
     function Get(uint _id, string _name) public view returns(string name, address addr, string abiUrl, uint released, uint version, uint update, address updateAddr, string updateAbiUrl, uint active, address owner, uint created);
-
 
     function GetRouteIdsForOwner(address _owner) public view returns(uint[] routeIds);
 
