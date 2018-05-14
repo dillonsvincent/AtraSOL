@@ -12,7 +12,7 @@ interface IADS {
     
     function ScheduleUpdate(uint routeId, string routeName, uint updateRelease, address updateContractAddress, string updateAbiLocation) public returns(bool success);
     
-    function Get(uint routeId, string routeName) public view returns(string name, address owner, uint updateRelease, address currentContractAddress, string currentAbiLocation, address updateContractAddress, string updateAbiLocation, uint created, uint version, uint active, uint released);
+    function Get(uint _id, string _name) public view returns(string name, address addr, string abiUrl, uint released, uint version, uint update, address updateAddr, string updateAbiUrl, uint active, address owner, uint created);
     function GetRouteIdsForOwner(address owner) public view returns(uint[] routeIds);
     
     function GetAddress(uint routeId, string routeName) public view returns(address validAddress);
@@ -97,28 +97,40 @@ contract ADS is IADS, AtraOwners {
         OwnersToRoutes[msg.sender].push(1);
     }
 
-    function Get(uint routeId, string routeName) public view returns(string name, address owner, uint updateRelease, address currentContractAddress, string currentAbiLocation, address updateContractAddress, string updateAbiLocation, uint created, uint version, uint active, uint released) {
+    function Get(uint _id, string _name) public view returns(
+            string name, 
+            address addr, 
+            string abiUrl, 
+            uint released, 
+            uint version, 
+            uint update,  
+            address updateAddr, 
+            string updateAbiUrl, 
+            uint active, 
+            address owner, 
+            uint created
+        ) {
         Route memory route;
-        if(bytes(routeName).length > 0){
-            route = Routes[ContractNamesToRoutes[keccak256(routeName)]];  
+        if(bytes(_name).length > 0){
+            route = Routes[ContractNamesToRoutes[keccak256(_name)]];  
         }else{
-            route = Routes[routeId];  
+            route = Routes[_id];  
         }
         return (
-            route.name, 
-            route.owner, 
-            route.updateRelease, 
-            route.current.contractAddress, 
-            route.current.abiLocation, 
-            route.update.contractAddress, 
-            route.update.abiLocation, 
-            route.created, //created 
-            //check is next contract is active, if so it's a different version add 1, else return normal version
-            route.updateRelease < now ? route.version.add(1) : route.version, //version
-            // active position  will be used to determine what address to use by the client 0=current 1=next
-            route.updateRelease < now ? 1 : 0, //active position
+            route.name, //name
+            route.current.contractAddress, //addr
+            route.current.abiLocation, //abi
             // if update is active the released date is when it went live, else it's the release date
-            route.updateRelease < now ? route.updateRelease : route.released //released
+            route.updateRelease < now ? route.updateRelease : route.released, //released
+            //check is next contract is active, if so it's a different version add 1, else return normal version
+            route.updateRelease < now ? route.version.add(1) : route.version, //version            
+            // active position  will be used to determine what address to use by the client 0=current 1=next
+            route.updateRelease, //update
+            route.update.contractAddress, //updateAddr
+            route.update.abiLocation, //updateAbi
+            route.updateRelease < now ? 1 : 0, //active
+            route.owner, //owner
+            route.created //created 
             );
     }
     
