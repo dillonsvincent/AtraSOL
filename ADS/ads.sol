@@ -9,20 +9,25 @@ pragma solidity^0.4.20;
 */
 interface IADS {
     function Create(string name, address currentAddress, string currentAbiLocation) public payable returns(uint newRouteId);
-    
-    function ScheduleUpdate(uint routeId, string routeName, uint updateRelease, address updateContractAddress, string updateAbiLocation) public returns(bool success);
-    
+
+    function ScheduleUpdate(uint _id, string _name, uint _release, address _addr, string _abiUrl) public returns(bool success);
+
     function Get(uint _id, string _name) public view returns(string name, address addr, string abiUrl, uint released, uint version, uint update, address updateAddr, string updateAbiUrl, uint active, address owner, uint created);
-    function GetRouteIdsForOwner(address owner) public view returns(uint[] routeIds);
+
+
+    function GetRouteIdsForOwner(address _owner) public view returns(uint[] routeIds);
+
+    function GetAddress(uint _id, string _name) public view returns(address addr);
     
-    function GetAddress(uint routeId, string routeName) public view returns(address validAddress);
-    function GetAddressAndAbi(uint routeId, string routeName) public view returns(address validAddress, string abiLocation);
+    function GetAddressAndAbi(uint _id, string _name) public view returns(address addr, string abiUrl);
 
     function RoutesLength() public view returns(uint length);
-    function NameTaken(string name) public view returns(bool);
     
-    function TransferRouteOwnership(uint routeId, string routeName, address newOwner) public returns(bool success);
-    function AcceptRouteOwnership(uint routeId, string routeName) public returns(bool success);
+    function NameTaken(string _name) public view returns(bool taken);
+
+    function TransferRouteOwnership(uint _id, string _name, address _owner) public returns(bool success);
+    
+    function AcceptRouteOwnership(uint _id, string _name) public returns(bool success);
 }
 contract AtraOwners {
     address public owner;
@@ -134,26 +139,26 @@ contract ADS is IADS, AtraOwners {
             );
     }
     
-    function GetRouteIdsForOwner(address owner) public view returns(uint[] routeIds) {
-        return OwnersToRoutes[owner];
+    function GetRouteIdsForOwner(address _owner) public view returns(uint[] routeIds) {
+        return OwnersToRoutes[_owner];
     }
 
-    function GetAddress(uint routeId, string routeName) public view returns(address validAddress) {
+    function GetAddress(uint _id, string _name) public view returns(address addr) {
         Route memory route;
-        if(bytes(routeName).length > 0){
-            route = Routes[ContractNamesToRoutes[keccak256(routeName)]];  
+        if(bytes(_name).length > 0){
+            route = Routes[ContractNamesToRoutes[keccak256(_name)]];  
         }else{
-            route = Routes[routeId];  
+            route = Routes[_id];  
         }
         return route.updateRelease < now ? route.update.contractAddress : route.current.contractAddress;
     }
     
-    function GetAddressAndAbi(uint routeId, string routeName) public view returns(address validAddress, string abiLocation) {
+    function GetAddressAndAbi(uint _id, string _name) public view returns(address addr, string abiUrl) {
         Route memory route;
-        if(bytes(routeName).length > 0){
-            route = Routes[ContractNamesToRoutes[keccak256(routeName)]];  
+        if(bytes(_name).length > 0){
+            route = Routes[ContractNamesToRoutes[keccak256(_name)]];  
         }else{
-            route = Routes[routeId];  
+            route = Routes[_id];  
         }
         return route.updateRelease < now ? (route.update.contractAddress, route.update.abiLocation) : (route.current.contractAddress, route.current.abiLocation);
     }
@@ -162,34 +167,34 @@ contract ADS is IADS, AtraOwners {
         return Routes.length;
     }
     
-    function NameTaken(string name) public view returns(bool) {
-        require(bytes(name).length > 0 && bytes(name).length <= 100);
-        if(ContractNamesToRoutes[keccak256(name)] == 0){
+    function NameTaken(string _name) public view returns(bool) {
+        require(bytes(_name).length > 0 && bytes(_name).length <= 100);
+        if(ContractNamesToRoutes[keccak256(_name)] == 0){
             return false;//name is not taken
         }else{
             return true;
         }
     }
     
-    function Create(string name, address currentAddress, string currentAbiLocation) public payable returns(uint newRouteId) {
+    function Create(string _name, address _addr, string _abiUrl) public payable returns(uint id) {
         require(msg.value == RoutePrice);
         // validate inputs
-        require(bytes(name).length > 0 && bytes(name).length <= 100 && bytes(currentAbiLocation).length <= 256);
-        require(ContractNamesToRoutes[keccak256(name)] == 0);
-        uint routeId = Routes.push(Route(name, now, msg.sender, msg.sender, RouteData(currentAbiLocation, currentAddress), RouteData(currentAbiLocation, currentAddress),now, 0, now)) -1;
+        require(bytes(_name).length > 0 && bytes(_name).length <= 100 && bytes(_abiUrl).length <= 256);
+        require(ContractNamesToRoutes[keccak256(_name)] == 0);
+        uint routeId = Routes.push(Route(_name, now, msg.sender, msg.sender, RouteData(_abiUrl, _addr), RouteData(_abiUrl, _addr),now, 0, now)) -1;
         OwnersToRoutes[msg.sender].push(routeId);
-        emit RouteCreated(name, msg.sender);
-        return ContractNamesToRoutes[keccak256(name)] = routeId;
+        emit RouteCreated(_name, msg.sender);
+        return ContractNamesToRoutes[keccak256(_name)] = routeId;
     }
 
-    function ScheduleUpdate(uint routeId, string routeName, uint updateRelease, address nextContractAddress, string nextAbiLocation) public returns(bool success) {
+    function ScheduleUpdate(uint _id, string _name, uint _release, address _addr, string _abiUrl) public returns(bool success) {
         //dont require name validation since we aren't storing it
-        require(bytes(nextAbiLocation).length <= 256);
+        require(bytes(_abiUrl).length <= 256);
         Route storage route;
-        if(bytes(routeName).length > 0){
-            route = Routes[ContractNamesToRoutes[keccak256(routeName)]];  
+        if(bytes(_name).length > 0){
+            route = Routes[ContractNamesToRoutes[keccak256(_name)]];  
         }else{
-            route = Routes[routeId];  
+            route = Routes[_id];  
         }
         require(route.owner == msg.sender); //require sender to be owner to update
         
@@ -200,33 +205,33 @@ contract ADS is IADS, AtraOwners {
             route.version = route.version.add(1);
         }
         
-        route.updateRelease = now.add(updateRelease);// if updateRelease is zero update will be live now
-        route.update.contractAddress = nextContractAddress; // update next address
-        route.update.abiLocation = nextAbiLocation; // update next abi location
+        route.updateRelease = now.add(_release);// if updateRelease is zero update will be live now
+        route.update.contractAddress = _addr; // update next address
+        route.update.abiLocation = _abiUrl; // update next abi location
         emit UpdateScheduled(route.name, msg.sender);
         return true; // return success
     }
 
-    function TransferRouteOwnership(uint routeId, string routeName, address newOwner) public returns(bool success) {
+    function TransferRouteOwnership(uint _id, string _name, address _owner) public returns(bool success) {
         Route storage route;
-        if(bytes(routeName).length > 0){
-            route = Routes[ContractNamesToRoutes[keccak256(routeName)]];  
+        if(bytes(_name).length > 0){
+            route = Routes[ContractNamesToRoutes[keccak256(_name)]];  
         }else{
-            route = Routes[routeId];  
+            route = Routes[_id];  
         }
         require(route.owner == msg.sender); //require sender to be owner to transfer ownership
-        route.newOwner = newOwner; // set new owner
-        emit TransferOwnership(route.name, msg.sender, newOwner);
+        route.newOwner = _owner; // set new owner
+        emit TransferOwnership(route.name, msg.sender, route.newOwner);
         return true; // return success
     }
 
-    function AcceptRouteOwnership(uint routeId, string routeName) public returns(bool success) {
+    function AcceptRouteOwnership(uint _id, string _name) public returns(bool success) {
         Route storage route;
-        if(bytes(routeName).length > 0){
-            routeId = ContractNamesToRoutes[keccak256(routeName)];
-            route = Routes[ContractNamesToRoutes[keccak256(routeName)]];  
+        if(bytes(_name).length > 0){
+            _id = ContractNamesToRoutes[keccak256(_name)];
+            route = Routes[ContractNamesToRoutes[keccak256(_name)]];  
         }else{
-            route = Routes[routeId];  
+            route = Routes[_id];  
         }
         require(route.newOwner == msg.sender); //require sender to be newOwner to accecpt ownership
         
@@ -235,7 +240,7 @@ contract ADS is IADS, AtraOwners {
         uint keepRouteId = OwnersToRoutes[route.owner][OwnersToRoutes[route.owner].length - 1];
         //replace routeId marked for delete
         for(uint x = 0; x < OwnersToRoutes[route.owner].length; x++){
-            if(OwnersToRoutes[route.owner][x] == routeId){
+            if(OwnersToRoutes[route.owner][x] == _id){
                 OwnersToRoutes[route.owner][x] = keepRouteId;
             }
         }
@@ -246,27 +251,27 @@ contract ADS is IADS, AtraOwners {
         
         // Add route to new owner
         route.owner = route.newOwner; // transfer ownership
-        OwnersToRoutes[route.owner].push(routeId); // add lookup
+        OwnersToRoutes[route.owner].push(_id); // add lookup
         
-        emit AcceptOwnership(routeName, route.owner);
+        emit AcceptOwnership(route.name, route.owner);
         return true; // return success
     }
     function Price() public view returns(uint price) {
         return RoutePrice;
     } 
     
-    function SetPrice(uint amount) public isOwner returns(bool) {
-        RoutePrice = amount;
+    function SetPrice(uint _amount) public isOwner returns(bool success) {
+        RoutePrice = _amount;
         return true;
     }
 
-    function Widthdraw(uint amount) public isOwner returns(bool) {
+    function Widthdraw(uint _amount) public isOwner returns(bool success) {
         // if amount is zero take the whole balance else use amount
-        owner.transfer(amount == 0 ? address(this).balance : amount);
+        owner.transfer(_amount == 0 ? address(this).balance : _amount);
         return true;
     }
 
-    function Balance() public view isOwner returns(uint) {
+    function Balance() public view isOwner returns(uint balance) {
         return address(this).balance;
     }
 }
