@@ -5,7 +5,7 @@ pragma solidity^0.4.20;
     Author: Dillon Vincent
     Title: Address Delegate Service (ADS)
     Documentation: atra.readthedocs.io
-    Date: 5/14/18
+    Date: 4/4/18
 */
 interface IADS {
     function Create(string name, address currentAddress, string currentAbiLocation) public payable returns(uint newRouteId);
@@ -23,6 +23,10 @@ interface IADS {
     function RoutesLength() public view returns(uint length);
     
     function NameTaken(string _name) public view returns(bool taken);
+    
+    function GetPendingRouteTransfer(uint _id, string _name) public view returns(address addr);
+    
+    function GetPendingTransfersForSender() public view returns(uint[] routeIds);
 
     function TransferRouteOwnership(uint _id, string _name, address _owner) public returns(bool success);
     
@@ -85,6 +89,7 @@ contract ADS is IADS, AtraOwners {
     Route[] public Routes;
     mapping(bytes32 => uint) public ContractNamesToRoutes; // (keccak256('Route Name') => routeId)
     mapping(address => uint[]) public OwnersToRoutes;
+    mapping(address => uint[]) public OwnersToPendingTransfersByRouteId;
     
     //Events
     event RouteCreated(string name, address owner);
@@ -111,7 +116,7 @@ contract ADS is IADS, AtraOwners {
             address updateAddr, 
             string updateAbiUrl, 
             uint active, 
-            address owner, 
+            address owner,
             uint created
         ) {
         Route memory route;
@@ -210,16 +215,33 @@ contract ADS is IADS, AtraOwners {
         emit UpdateScheduled(route.name, msg.sender);
         return true; // return success
     }
-
-    function TransferRouteOwnership(uint _id, string _name, address _owner) public returns(bool success) {
+    
+    // return the new owner address for a pending route transfer
+    function GetPendingRouteTransfer(uint _id, string _name) public view returns(address addr) {
         Route storage route;
         if(bytes(_name).length > 0){
             route = Routes[ContractNamesToRoutes[keccak256(_name)]];  
         }else{
             route = Routes[_id];  
         }
+        return route.newOwner != route.owner ? route.newOwner : address(0);
+    }
+    
+    function GetPendingTransfersForSender() public view returns(uint[] routeIds) {
+        return OwnersToPendingTransfersByRouteId[msg.sender];
+    }
+
+    function TransferRouteOwnership(uint _id, string _name, address _owner) public returns(bool success) {
+        Route storage route;
+        if(bytes(_name).length > 0){
+            _id = ContractNamesToRoutes[keccak256(_name)];
+            route = Routes[ContractNamesToRoutes[keccak256(_name)]];  
+        }else{
+            route = Routes[_id];  
+        }
         require(route.owner == msg.sender); //require sender to be owner to transfer ownership
         route.newOwner = _owner; // set new owner
+        OwnersToPendingTransfersByRouteId[route.newOwner].push(_id);
         emit TransferOwnership(route.name, msg.sender, route.newOwner);
         return true; // return success
     }
@@ -248,9 +270,24 @@ contract ADS is IADS, AtraOwners {
         //adjust array length
         OwnersToRoutes[route.owner].length--;
         
-        // Add route to new owner
+         // Add route to new owner
         route.owner = route.newOwner; // transfer ownership
-        OwnersToRoutes[route.owner].push(_id); // add lookup
+        OwnersToRoutes[route.owner].push(_id); // add lookup 
+        
+        
+        // remove route id from PendingRouteOwnershipTransfer for the new owner
+        uint keepPendingRouteId = OwnersToPendingTransfersByRouteId[route.owner][OwnersToPendingTransfersByRouteId[route.owner].length - 1];
+        //replace routeId marked for delete
+        for(uint y = 0; y < OwnersToPendingTransfersByRouteId[route.owner].length; y++){
+            if(OwnersToPendingTransfersByRouteId[route.owner][y] == _id){
+                OwnersToPendingTransfersByRouteId[route.owner][y] = keepPendingRouteId;
+            }
+        }
+        //delete last position
+        delete OwnersToPendingTransfersByRouteId[route.owner][OwnersToPendingTransfersByRouteId[route.owner].length - 1];
+        //adjust array length
+        OwnersToPendingTransfersByRouteId[route.owner].length--;
+        
         
         emit AcceptOwnership(route.name, route.owner);
         return true; // return success
