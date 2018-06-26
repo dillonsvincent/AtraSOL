@@ -1,1 +1,1 @@
-# Atra Smart Contracts
+# Atra Public Smart Contracts
